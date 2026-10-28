@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meine Datei-Mediathek</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1020;--panel:#141c30;--panel2:#1c2740;--text:#f4f7ff;--muted:#aab6d0;--accent:#78a9ff;--line:#2a3857}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#172747 0,#0b1020 55%);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:28px max(18px,calc((100% - 1200px)/2));border-bottom:1px solid var(--line);background:#0b1020cc}
+h1{margin:0;font-size:clamp(1.7rem,4vw,2.5rem)}header p{color:var(--muted);margin:7px 0 0}.wrap{max-width:1200px;margin:auto;padding:22px 18px 50px}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}.toolbar input,.toolbar select{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font:inherit}.toolbar input{flex:1;min-width:190px}
+button,.btn{border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--text);padding:9px 12px;font:inherit;text-decoration:none;cursor:pointer}button:hover,.btn:hover{border-color:var(--accent)}
+.layout{display:grid;grid-template-columns:minmax(250px, .8fr) minmax(0,1.5fr);gap:18px;align-items:start}
+.panel{background:#111a2bd9;border:1px solid var(--line);border-radius:18px;overflow:hidden}.panel h2{font-size:1.05rem;margin:0;padding:15px 16px;border-bottom:1px solid var(--line)}
+#crumbs{padding:12px 14px;color:var(--muted);font-size:.9rem;border-bottom:1px solid var(--line)}#crumbs button{padding:4px 7px;margin:2px}
+#status{padding:12px 16px;color:var(--muted);font-size:.92rem}
+#fileList{padding:8px;max-height:68vh;overflow:auto}.entry{width:100%;display:flex;align-items:center;gap:10px;text-align:left;background:transparent;border:1px solid transparent;padding:11px 10px;border-radius:11px;margin:2px 0}.entry:hover,.entry.active{background:var(--panel2);border-color:var(--line)}.ico{width:34px;height:34px;display:grid;place-items:center;background:#243452;border-radius:9px;flex-shrink:0}.entry-name{overflow-wrap:anywhere;flex:1}.sub{display:block;color:var(--muted);font-size:.78rem}.preview-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 16px;border-bottom:1px solid var(--line)}.preview-head h2{border:0;padding:0;overflow-wrap:anywhere}.preview-actions{display:flex;gap:8px;flex-wrap:wrap}.preview-body{padding:16px;min-height:300px}.empty{display:grid;place-items:center;min-height:280px;text-align:center;color:var(--muted);padding:25px}.empty strong{display:block;color:var(--text);font-size:1.1rem;margin-bottom:5px}
+#viewer{width:100%;border:0;border-radius:10px;background:#fff;min-height:380px}#viewer.image{max-height:70vh;min-height:0;object-fit:contain;background:#080d17}video,audio{width:100%;max-height:70vh}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#080d17;border:1px solid var(--line);padding:15px;border-radius:10px;max-height:70vh;overflow:auto}iframe{width:100%;height:65vh;border:1px solid var(--line);border-radius:10px;background:white} .note{color:var(--muted);font-size:.88rem;margin-top:12px}.hidden{display:none!important}
+@media(max-width:800px){.layout{grid-template-columns:1fr}#fileList{max-height:42vh}.preview-body{padding:12px}iframe{height:55vh}#viewer{min-height:280px}}
+</style>
+</head>
+<body>
+<header><h1>📁 Meine Datei-Mediathek</h1><p>Videos ansehen · Bilder öffnen · Dateien herunterladen · Ordner durchsuchen</p></header>
+<main class="wrap">
+  <div class="toolbar">
+    <input id="search" type="search" placeholder="Dateien und Ordner suchen …" aria-label="Suchen">
+    <button id="refresh">↻ Aktualisieren</button>
+    <a class="btn" href="https://github.com/JohannaGansch/Meine_Website/tree/main/Website_Datein" target="_blank" rel="noopener">GitHub-Ordner öffnen ↗</a>
+  </div>
+  <div class="layout">
+    <section class="panel">
+      <h2>📚 Dateien & Kategorien</h2>
+      <div id="crumbs"></div><div id="status">Verbinde mit GitHub …</div><div id="fileList"></div>
+    </section>
+    <section class="panel">
+      <div class="preview-head"><h2 id="previewTitle">Vorschau</h2><div class="preview-actions" id="actions"></div></div>
+      <div class="preview-body" id="preview"><div class="empty"><div><strong>Wähle eine Datei aus</strong>Hier wird die Vorschau angezeigt, sofern das Format unterstützt wird.</div></div></div>
+    </section>
+  </div>
+  <p class="note">Hinweis: Eine Website kann nicht jedes Dateiformat direkt anzeigen. Nicht unterstützte Formate bleiben sichtbar und können heruntergeladen werden. HTML-Vorschauen laufen aus Sicherheitsgründen in einem isolierten Fenster. Private GitHub-Repositories benötigen eine Anmeldung, die diese reine HTML-Seite nicht bereitstellt.</p>
+</main>
+<script>
+(() => {
+  const OWNER='JohannaGansch', REPO='Meine_Website', BRANCH='main', ROOT='Website_Datein';
+  const API='https://api.github.com/repos/'+OWNER+'/'+REPO+'/contents/';
+  const RAW='https://raw.githubusercontent.com/'+OWNER+'/'+REPO+'/'+BRANCH+'/';
+  const $=id=>document.getElementById(id);
+  let currentPath=ROOT, entries=[], selected=null, loading=false;
+  const ext=name => (name.includes('.')?name.split('.').pop():'').toLowerCase();
+  const encodePath=path=>path.split('/').map(encodeURIComponent).join('/');
+  const rawUrl=path=>RAW+encodePath(path);
+  const formatSize=n=>{if(!Number.isFinite(n))return '';const units=['B','KB','MB','GB'];let i=0;while(n>=1024&&i<units.length-1){n/=1024;i++}return (i? n.toFixed(1):n.toString())+' '+units[i]};
+  const icon=item=>item.type==='dir'?'📁':({mp4:'🎬',webm:'🎬',mov:'🎬',m4v:'🎬',ogv:'🎬',mp3:'🎵',wav:'🎵',ogg:'🎵',flac:'🎵',png:'🖼️',jpg:'🖼️',jpeg:'🖼️',gif:'🖼️',webp:'🖼️',svg:'🖼️',bmp:'🖼️',avif:'🖼️',pdf:'📕',html:'🌐',htm:'🌐',txt:'📄',md:'📄',json:'📄',csv:'📊',js:'💻',css:'🎨',zip:'📦',rar:'📦','7z':'📦'})[ext(item.name)]||'📄';
+  const isImage=e=>['png','jpg','jpeg','gif','webp','svg','bmp','avif','ico'].includes(e);
+  const isVideo=e=>['mp4','webm','ogv','ogg','mov','m4v'].includes(e);
+  const isAudio=e=>['mp3','wav','ogg','m4a','aac','flac'].includes(e);
+  const textExt=['txt','md','markdown','json','js','mjs','ts','css','xml','csv','log','yaml','yml','ini','py','java','c','cpp','h','cs','shader','glsl','sql','bat','sh','toml','rtf'];
+  async function list(path){
+    if(loading)return;loading=true;$('status').textContent='Lade Dateien von GitHub …';$('fileList').innerHTML='';
+    try{
+      const response=await fetch(API+encodePath(path)+'?ref='+encodeURIComponent(BRANCH),{headers:{Accept:'application/vnd.github+json'}});
+      if(!response.ok)throw new Error(response.status===404?'Ordner nicht gefunden. Prüfe den Pfad und ob das Repository öffentlich ist.':response.status===403?'GitHub hat das anonyme API-Limit erreicht. Bitte später erneut versuchen.':'GitHub antwortet mit HTTP '+response.status+'.');
+      const data=await response.json(); if(!Array.isArray(data))throw new Error('GitHub hat keine Ordnerliste zurückgegeben.');
+      currentPath=path;entries=data.sort((a,b)=>a.type===b.type?a.name.localeCompare(b.name):a.type==='dir'?-1:1);
+      renderCrumbs();renderList();$('status').textContent=entries.length+' Einträge · Quelle: GitHub · Branch: '+BRANCH;
+    }catch(err){$('status').textContent='Fehler: '+err.message;$('fileList').innerHTML='<div class="empty">Dateien konnten nicht geladen werden.</div>'}
+    finally{loading=false}
+  }
+  function renderCrumbs(){
+    const parts=currentPath.split('/');$('crumbs').innerHTML='';
+    let built='';
+    parts.forEach((part,i)=>{built+=(i?'/':'')+part;const path=built;const b=document.createElement('button');b.textContent=(i===0?'🏠 ':'')+part;b.onclick=()=>list(path);$('crumbs').append(b);if(i<parts.length-1)$('crumbs').append(document.createTextNode(' / '))});
+  }
+  function renderList(){
+    const q=$('search').value.trim().toLowerCase();const list=$('fileList');list.innerHTML='';
+    const filtered=entries.filter(x=>x.name.toLowerCase().includes(q));
+    if(!filtered.length){list.innerHTML='<div class="empty">Keine passenden Dateien gefunden.</div>';return}
+    filtered.forEach(item=>{
+      const b=document.createElement('button');b.className='entry'+(selected?.path===item.path?' active':'');b.type='button';
+      const ico=document.createElement('span');ico.className='ico';ico.textContent=icon(item);
+      const name=document.createElement('span');name.className='entry-name';name.textContent=item.name;
+      const sub=document.createElement('span');sub.className='sub';sub.textContent=item.type==='dir'?'Unterkategorie':formatSize(item.size);
+      name.append(sub);b.append(ico,name);b.onclick=()=>item.type==='dir'?list(item.path):showFile(item);list.append(b);
+    });
+  }
+  function addAction(label,url,download=false){
+    const a=document.createElement('a');a.className='btn';a.textContent=label;a.href=url;a.target='_blank';a.rel='noopener noreferrer';if(download){a.download=selected?.name||'';a.target='_self'}$('actions').append(a);
+  }
+  function showFile(item){
+    selected=item;renderList();$('previewTitle').textContent='Vorschau: '+item.name;$('actions').innerHTML='';$('preview').innerHTML='';
+    const url=item.download_url||rawUrl(item.path), e=ext(item.name);
+    addAction('Datei öffnen ↗',url);addAction('⬇ Herunterladen',url,true);
+    const note=document.createElement('p');note.className='note';
+    if(isImage(e)){
+      const img=document.createElement('img');img.src=url;img.alt=item.name;img.style='display:block;max-width:100%;max-height:70vh;margin:auto;object-fit:contain';$('preview').append(img);
+    }else if(isVideo(e)){
+      const v=document.createElement('video');v.controls=true;v.preload='metadata';v.src=url;v.textContent='Dein Browser kann dieses Videoformat nicht abspielen.';$('preview').append(v);
+    }else if(isAudio(e)){
+      const a=document.createElement('audio');a.controls=true;a.src=url;$('preview').append(a);
+    }else if(e==='pdf'){
+      const frame=document.createElement('iframe');frame.title='PDF-Vorschau';frame.src=url;$('preview').append(frame);
+    }else if(e==='html'||e==='htm'){
+      const label=document.createElement('div');label.textContent='Vorschau';label.style='font-weight:700;margin-bottom:8px;color:var(--muted)';$('preview').append(label);
+      const frame=document.createElement('iframe');frame.title='HTML-Vorschau';frame.setAttribute('sandbox','');frame.referrerPolicy='no-referrer';frame.src=url;$('preview').append(frame);
+      note.textContent='Die HTML-Datei wird in einem isolierten Vorschaufenster angezeigt. Skripte und manche externen Ressourcen können dadurch blockiert sein.';$('preview').append(note);
+    }else if(e==='links'||(e==='txt'&&/links?|urls?|verweise/i.test(item.name))){
+      fetch(url).then(r=>r.text()).then(text=>{const box=document.createElement('div');box.style='display:grid;gap:8px';let found=0;text.split(/\r?\n/).forEach(line=>{const t=line.trim();if(!t||t.startsWith('#'))return;const match=t.match(/https?:\/\/[^\s"'<>]+/);if(match){const a=document.createElement('a');a.className='btn';a.href=match[0];a.target='_blank';a.rel='noopener noreferrer';a.textContent=t;$('preview').append(a);found++}else{const p=document.createElement('p');p.textContent=t;$('preview').append(p)}});if(!found){box.textContent='Keine anklickbaren HTTP/HTTPS-Links gefunden.';$('preview').append(box)}}).catch(()=>showTextError());note.textContent='Zeilen mit http:// oder https:// werden anklickbar dargestellt.';$('preview').append(note);
+    }else if(textExt.includes(e)){
+      fetch(url).then(r=>{if(!r.ok)throw new Error('Datei konnte nicht geladen werden');return r.text()}).then(text=>{const pre=document.createElement('pre');pre.textContent=text;$('preview').append(pre)}).catch(showTextError);
+    }else{
+      const box=document.createElement('div');box.className='empty';const inner=document.createElement('div');const strong=document.createElement('strong');strong.textContent='Keine direkte Vorschau für dieses Format';const p=document.createElement('p');p.textContent='Die Datei ist in der Liste verfügbar. Nutze „Herunterladen“ oder „Datei öffnen“, um sie mit einem passenden Programm zu öffnen.';inner.append(strong,p);box.append(inner);$('preview').append(box);
+    }
+  }
+  function showTextError(){const p=document.createElement('p');p.className='note';p.textContent='Die Vorschau konnte nicht geladen werden. Du kannst die Datei trotzdem herunterladen.';$('preview').append(p)}
+  $('search').addEventListener('input',renderList);$('refresh').addEventListener('click',()=>list(currentPath));list(ROOT);
+})();
+</script>
+</body>
+</html>
